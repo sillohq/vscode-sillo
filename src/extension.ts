@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CTX_MEMBERS } from './ctxApi';
 import { SilloStructureProvider } from './treeView';
 import { RouteCodeLensProvider, makeRunRouteCommand } from './requestRunner';
+import { RouteInfo } from './scan';
 import { registerDiagnostics } from './diagnostics';
 import { ModelKwargCompletionProvider, ValidatedDataDefinitionProvider } from './models';
 import { DbViewerPanel } from './dbViewerPanel';
@@ -210,6 +211,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('sillo.refreshStructure', refreshAll),
     vscode.commands.registerCommand('sillo.runRoute', makeRunRouteCommand(context)),
+    vscode.commands.registerCommand('sillo.openRouteDefinition', (node: { info: RouteInfo }) =>
+      vscode.commands.executeCommand('vscode.open', node.info.uri, {
+        selection: new vscode.Range(node.info.line, 0, node.info.line, 0),
+      })
+    ),
+    vscode.commands.registerCommand('sillo.runRouteFromTree', (node: { info: RouteInfo }) =>
+      makeRunRouteCommand(context)(node.info)
+    ),
     vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
     vscode.commands.registerCommand('sillo.openApiDocs', openApiDocs),
     vscode.commands.registerCommand('sillo.openDatabaseViewer', () => DbViewerPanel.show(context)),

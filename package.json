@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -53,6 +53,18 @@
           "command": "sillo.refreshStructure",
           "when": "view == sillo.structure",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sillo.openRouteDefinition",
+          "when": "view == sillo.structure && viewItem == sillo.route",
+          "group": "inline@1"
+        },
+        {
+          "command": "sillo.runRouteFromTree",
+          "when": "view == sillo.structure && viewItem == sillo.route",
+          "group": "inline@2"
         }
       ]
     },
@@ -132,6 +144,18 @@
         "command": "sillo.openDatabaseViewer",
         "title": "Sillo: Open Database Viewer",
         "category": "Sillo"
+      },
+      {
+        "command": "sillo.openRouteDefinition",
+        "title": "Sillo: Open Route Definition",
+        "category": "Sillo",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "sillo.runRouteFromTree",
+        "title": "Sillo: Try Request",
+        "category": "Sillo",
+        "icon": "$(play)"
       }
     ],
     "configuration": {
