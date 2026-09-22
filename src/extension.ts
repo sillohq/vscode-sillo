@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { CTX_MEMBERS } from './ctxApi';
+import { SilloStructureProvider } from './treeView';
+import { RouteCodeLensProvider, runRoute } from './requestRunner';
 
 const PYTHON: vscode.DocumentSelector = { language: 'python' };
 
@@ -74,10 +76,113 @@ async function runCommandPicker(): Promise<void> {
   if (args) runInTerminal(args);
 }
 
+function baseUrl(): string {
+  return vscode.workspace.getConfiguration('sillo').get<string>('baseUrl', 'http://127.0.0.1:8000');
+}
+
+async function previewApplication(): Promise<void> {
+  const devCommand = vscode.workspace.getConfiguration('sillo').get<string>(
+    'devServerCommand',
+    'uvicorn app.main:app --reload'
+  );
+  const folders = vscode.workspace.workspaceFolders;
+  const cwd = folders && folders.length > 0 ? folders[0].uri.fsPath : undefined;
+  const terminal = vscode.window.terminals.find((t) => t.name === 'Sillo Server') ??
+    vscode.window.createTerminal({ name: 'Sillo Server', cwd });
+  terminal.show();
+  terminal.sendText(devCommand);
+
+  const url = baseUrl();
+  const opened = await vscode.commands.executeCommand('simpleBrowser.show', url).then(
+    () => true,
+    () => false
+  );
+  if (!opened) await vscode.env.openExternal(vscode.Uri.parse(url));
+}
+
+function toSnakeCase(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+}
+
+async function newMiddleware(): Promise<void> {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders || folders.length === 0) {
+    vscode.window.showErrorMessage('Sillo: open a folder first.');
+    return;
+  }
+
+  const className = await vscode.window.showInputBox({
+    prompt: 'Middleware class name',
+    placeHolder: 'RequireLogin',
+    validateInput: (value) => (/^[A-Za-z_]\w*$/.test(value) ? undefined : 'Enter a valid Python class name'),
+  });
+  if (!className) return;
+
+  const body = [
+    'from sillo import BaseMiddleware',
+    '',
+    '',
+    `class ${className}(BaseMiddleware):`,
+    '    async def dispatch(self, ctx, call_next):',
+    '        response = await call_next()',
+    '        return response',
+    '',
+  ].join('\n');
+
+  const target = vscode.Uri.joinPath(folders[0].uri, 'middleware', `${toSnakeCase(className)}.py`);
+  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(folders[0].uri, 'middleware'));
+  await vscode.workspace.fs.writeFile(target, Buffer.from(body, 'utf8'));
+  const document = await vscode.workspace.openTextDocument(target);
+  await vscode.window.showTextDocument(document);
+}
+
+async function createApp(): Promise<void> {
+  const name = await vscode.window.showInputBox({
+    prompt: 'New Sillo app name',
+    placeHolder: 'myapp',
+    validateInput: (value) => (/^[A-Za-z][\w-]*$/.test(value) ? undefined : 'Use a letter followed by letters, digits, hyphens or underscores'),
+  });
+  if (!name) return;
+
+  const folders = vscode.workspace.workspaceFolders;
+  const cwd = folders && folders.length > 0 ? folders[0].uri.fsPath : undefined;
+  const createCommand = vscode.workspace.getConfiguration('sillo').get<string>('createAppCommand', 'uvx sillo-start');
+
+  const terminal = vscode.window.createTerminal({ name: `Sillo: ${name}`, cwd });
+  terminal.show();
+  terminal.sendText(`${createCommand} create-app ${name}`.trim());
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  const structureProvider = new SilloStructureProvider();
+  const codeLensProvider = new RouteCodeLensProvider();
+
+  const refreshAll = () => {
+    structureProvider.refresh();
+    codeLensProvider.refresh();
+  };
+
+  const watcher = vscode.workspace.createFileSystemWatcher('**/*.py');
+  watcher.onDidChange(refreshAll);
+  watcher.onDidCreate(refreshAll);
+  watcher.onDidDelete(refreshAll);
+
   context.subscriptions.push(
+    watcher,
+    vscode.window.registerTreeDataProvider('sillo.structure', structureProvider),
+    vscode.languages.registerCodeLensProvider(PYTHON, codeLensProvider),
+
     vscode.languages.registerHoverProvider(PYTHON, new CtxHoverProvider()),
     vscode.languages.registerCompletionItemProvider(PYTHON, new CtxCompletionProvider(), '.'),
+
+    vscode.commands.registerCommand('sillo.refreshStructure', refreshAll),
+    vscode.commands.registerCommand('sillo.runRoute', runRoute),
+    vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
+    vscode.commands.registerCommand('sillo.newMiddleware', newMiddleware),
+    vscode.commands.registerCommand('sillo.createApp', createApp),
 
     vscode.commands.registerCommand('sillo.runCommand', runCommandPicker),
     vscode.commands.registerCommand('sillo.listRoutes', () => runInTerminal('routes')),

@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -30,6 +30,32 @@
         "path": "./snippets/python.json"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sillo",
+          "title": "Sillo",
+          "icon": "images/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sillo": [
+        {
+          "id": "sillo.structure",
+          "name": "Application Structure"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "sillo.refreshStructure",
+          "when": "view == sillo.structure",
+          "group": "navigation"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "sillo.runCommand",
@@ -65,6 +91,32 @@
         "command": "sillo.queueWork",
         "title": "Sillo: Start Queue Worker (queue:work)",
         "category": "Sillo"
+      },
+      {
+        "command": "sillo.previewApplication",
+        "title": "Sillo: Preview Application",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.newMiddleware",
+        "title": "Sillo: New Middleware...",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.createApp",
+        "title": "Sillo: Create Sillo App...",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.runRoute",
+        "title": "Sillo: Run Route Request",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.refreshStructure",
+        "title": "Sillo: Refresh Application Structure",
+        "category": "Sillo",
+        "icon": "$(refresh)"
       }
     ],
     "configuration": {
@@ -74,6 +126,21 @@
           "type": "string",
           "default": "sillo",
           "description": "The command used to invoke the Sillo CLI (e.g. \"sillo\", \"uv run sillo\")."
+        },
+        "sillo.createAppCommand": {
+          "type": "string",
+          "default": "uvx sillo-start",
+          "description": "The command used to scaffold a new Sillo app (runs \"<this> create-app <name>\")."
+        },
+        "sillo.devServerCommand": {
+          "type": "string",
+          "default": "uvicorn app.main:app --reload",
+          "description": "The command used to run the app for \"Sillo: Preview Application\"."
+        },
+        "sillo.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "Base URL the app is served on, used both to preview it and to run route requests from the editor."
         }
       }
     }
