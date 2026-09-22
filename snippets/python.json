@@ -1,4 +1,27 @@
 {
+  "Sillo: simple app": {
+    "prefix": "sillo-simple",
+    "description": "A basic Sillo app in one file: SilloApp, a Router mounted on it, and one route",
+    "body": [
+      "from sillo import HttpContext, Router, SilloApp, json",
+      "",
+      "app = SilloApp(title=\"${1:My API}\", version=\"${2:1.0.0}\")",
+      "",
+      "router = Router(prefix=\"/${3:api}\")",
+      "",
+      "",
+      "@router.get(\"/${4:hello}\")",
+      "async def ${5:hello}(ctx: HttpContext):",
+      "    return json({\"$6\": \"$7\"})",
+      "",
+      "",
+      "app.mount_router(router)",
+      "",
+      "# Run with: uvicorn ${TM_FILENAME_BASE}:app --reload",
+      "$0"
+    ]
+  },
+
   "Sillo: router": {
     "prefix": "sillo-router",
     "description": "A new Sillo Router with a path prefix",
@@ -82,6 +105,22 @@
       "",
       "class ${1:ModelName}(BaseModel):",
       "    ${2:field}: ${3:str}",
+      ""
+    ]
+  },
+
+  "Sillo: middleware": {
+    "prefix": "sillo-middleware",
+    "description": "A Sillo context middleware",
+    "body": [
+      "from sillo import BaseMiddleware, ${2:json}",
+      "",
+      "",
+      "class ${1:MiddlewareName}(BaseMiddleware):",
+      "    async def dispatch(self, ctx, call_next):",
+      "        $0",
+      "        response = await call_next()",
+      "        return response",
       ""
     ]
   },

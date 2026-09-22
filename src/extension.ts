@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CTX_MEMBERS } from './ctxApi';
 import { SilloStructureProvider } from './treeView';
 import { RouteCodeLensProvider, runRoute } from './requestRunner';
+import { registerDiagnostics } from './diagnostics';
 
 const PYTHON: vscode.DocumentSelector = { language: 'python' };
 
@@ -156,7 +157,14 @@ async function createApp(): Promise<void> {
   terminal.sendText(`${createCommand} create-app ${name}`.trim());
 }
 
+async function showBestPractices(context: vscode.ExtensionContext): Promise<void> {
+  const uri = vscode.Uri.joinPath(context.extensionUri, 'docs', 'best-practices.md');
+  await vscode.commands.executeCommand('markdown.showPreview', uri);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  registerDiagnostics(context);
+
   const structureProvider = new SilloStructureProvider();
   const codeLensProvider = new RouteCodeLensProvider();
 
@@ -183,6 +191,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
     vscode.commands.registerCommand('sillo.newMiddleware', newMiddleware),
     vscode.commands.registerCommand('sillo.createApp', createApp),
+    vscode.commands.registerCommand('sillo.showBestPractices', () => showBestPractices(context)),
 
     vscode.commands.registerCommand('sillo.runCommand', runCommandPicker),
     vscode.commands.registerCommand('sillo.listRoutes', () => runInTerminal('routes')),

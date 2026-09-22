@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -117,6 +117,11 @@
         "title": "Sillo: Refresh Application Structure",
         "category": "Sillo",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sillo.showBestPractices",
+        "title": "Sillo: Show Best Practices",
+        "category": "Sillo"
       }
     ],
     "configuration": {
