@@ -9,7 +9,6 @@ import * as vscode from 'vscode';
  */
 
 const APP_DECL = /(\w+)\s*=\s*SilloApp\(/;
-const APP_DECORATOR = /^\s*@(\w+)\.(get|post|put|patch|delete)\(/;
 const RUN_CALL = /\.run\(\s*\)/;
 const CTX_DB = /\bctx\.db\b/;
 const CTX_RESPONSE_CALL = /\bctx\.(json|html|text|redirect|file|stream)\s*\(/;
@@ -42,17 +41,6 @@ export function lint(document: vscode.TextDocument): vscode.Diagnostic[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-
-    const decoratorMatch = APP_DECORATOR.exec(line);
-    if (decoratorMatch && appVars.has(decoratorMatch[1])) {
-      diagnostics.push(
-        diagnostic(
-          new vscode.Range(i, 0, i, line.length),
-          `Route registered directly on "${decoratorMatch[1]}". Use a Router and ${decoratorMatch[1]}.mount_router(...) instead of decorating the app directly.`,
-          'app-decorator'
-        )
-      );
-    }
 
     for (const appVar of appVars) {
       const runMatch = new RegExp(`\\b${appVar}${RUN_CALL.source}`).exec(line);

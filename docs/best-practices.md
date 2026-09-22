@@ -4,36 +4,13 @@ What this extension's diagnostics (the red squiggles) actually check, and why.
 Each rule below is enforced by `src/diagnostics.ts` and cites the source it's
 grounded in — these are not style opinions invented for this document.
 
-## 1. Register routes through a `Router`, not on the app directly
+Routing directly on the app (`@app.get(...)`) is deliberately not one of
+these rules — it's exactly what the framework's own quick-start example in
+`sillo/__init__.py` does, and it's a fine way to write a Sillo app. `Router`
++ `mount_router(...)` is there for when you want a shared prefix or
+per-router middleware, not because decorating the app is wrong.
 
-```python
-# Flagged
-app = SilloApp(title="My API")
-
-@app.get("/users/{id:int}")
-async def get_user(ctx: HttpContext): ...
-```
-
-```python
-# Preferred
-app = SilloApp(title="My API")
-router = Router(prefix="/users")
-
-@router.get("/{id:int}")
-async def get_user(ctx: HttpContext): ...
-
-app.mount_router(router)
-```
-
-`SilloApp` does expose `.get()/.post()/.../.patch()` directly, and the
-framework's own quick-start example in `sillo/__init__.py` uses it for a
-single toy route. But once an app has more than one or two handlers, decorating
-the app instance directly means every route lives in one growing module with
-no shared prefix, tags or per-router middleware — a `Router`, mounted with
-`app.mount_router(...)`, is what the starter kit itself uses for everything
-past the single top-level page. Prefer it from the first route.
-
-## 2. Don't call `app.run()`
+## 1. Don't call `app.run()`
 
 ```python
 # Flagged
@@ -50,7 +27,7 @@ raises a `UserWarning` every time it's called: *"app.run() is inefficient and
 only for testing. For development and production, use: uvicorn app:app ...
 or granian app:app ..."*. The warning is the framework telling you directly.
 
-## 3. There is no `ctx.db`
+## 2. There is no `ctx.db`
 
 ```python
 # Flagged
@@ -69,7 +46,7 @@ access goes through a model's own manager (`User.objects...`), not through
 `ctx`. This one is a plain `AttributeError` waiting to happen, not a style
 choice.
 
-## 4. Responses are built by free functions, not `ctx` methods
+## 3. Responses are built by free functions, not `ctx` methods
 
 ```python
 # Flagged
