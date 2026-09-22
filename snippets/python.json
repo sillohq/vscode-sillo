@@ -1,0 +1,100 @@
+{
+  "Sillo: router": {
+    "prefix": "sillo-router",
+    "description": "A new Sillo Router with a path prefix",
+    "body": [
+      "from sillo import HttpContext, Router, json",
+      "",
+      "router = Router(prefix=\"/${1:api}\", tags=[\"${2:tag}\"])",
+      "",
+      "",
+      "@router.get(\"/${3:path}\")",
+      "async def ${4:handler_name}(ctx: HttpContext):",
+      "    return json({\"$5\": \"$6\"})",
+      ""
+    ]
+  },
+
+  "Sillo: GET route": {
+    "prefix": "sillo-get",
+    "description": "A Sillo GET route handler",
+    "body": [
+      "@router.get(\"/${1:path}\")",
+      "async def ${2:handler_name}(ctx: HttpContext):",
+      "    return json({\"$3\": \"$4\"})"
+    ]
+  },
+
+  "Sillo: POST route": {
+    "prefix": "sillo-post",
+    "description": "A Sillo POST route handler with a validated request body",
+    "body": [
+      "@router.post(\"/${1:path}\", request_model=${2:RequestModel})",
+      "async def ${3:handler_name}(ctx: HttpContext):",
+      "    data = ctx.validated_data",
+      "    return json({\"$4\": \"$5\"})"
+    ]
+  },
+
+  "Sillo: route with path param": {
+    "prefix": "sillo-route-param",
+    "description": "A Sillo route with a typed path parameter",
+    "body": [
+      "@router.get(\"/${1:things}/{${2:id}:${3|int,str,uuid|}}\")",
+      "async def ${4:handler_name}(ctx: HttpContext):",
+      "    ${2:id} = ctx.path_params[\"${2:id}\"]",
+      "    return json({\"${2:id}\": ${2:id}})"
+    ]
+  },
+
+  "Sillo: handler (ctx)": {
+    "prefix": "sillo-handler",
+    "description": "A bare Sillo handler taking ctx",
+    "body": [
+      "async def ${1:handler_name}(ctx: HttpContext):",
+      "    $0"
+    ]
+  },
+
+  "Sillo: model": {
+    "prefix": "sillo-model",
+    "description": "A Sillo ORM (Record) model",
+    "body": [
+      "from sillo.record.models import Model",
+      "from tortoise import fields",
+      "",
+      "",
+      "class ${1:ModelName}(Model):",
+      "    ${2:name} = fields.CharField(max_length=${3:150})",
+      "",
+      "    class Meta:",
+      "        table = \"${4:table_name}\"",
+      ""
+    ]
+  },
+
+  "Sillo: pydantic model": {
+    "prefix": "sillo-pydantic",
+    "description": "A plain Pydantic model for use as request_model/response_model",
+    "body": [
+      "from pydantic import BaseModel",
+      "",
+      "",
+      "class ${1:ModelName}(BaseModel):",
+      "    ${2:field}: ${3:str}",
+      ""
+    ]
+  },
+
+  "Sillo: JSON response": {
+    "prefix": "sillo-json",
+    "description": "Build a JSON response",
+    "body": ["json({\"$1\": \"$2\"})"]
+  },
+
+  "Sillo: redirect response": {
+    "prefix": "sillo-redirect",
+    "description": "Build a redirect response",
+    "body": ["redirect(\"${1:/path}\")"]
+  }
+}
