@@ -3,6 +3,7 @@ import { CTX_MEMBERS } from './ctxApi';
 import { SilloStructureProvider } from './treeView';
 import { RouteCodeLensProvider, runRoute } from './requestRunner';
 import { registerDiagnostics } from './diagnostics';
+import { ModelKwargCompletionProvider, ValidatedDataDefinitionProvider } from './models';
 
 const PYTHON: vscode.DocumentSelector = { language: 'python' };
 
@@ -81,6 +82,14 @@ function baseUrl(): string {
   return vscode.workspace.getConfiguration('sillo').get<string>('baseUrl', 'http://127.0.0.1:8000');
 }
 
+async function openInBrowser(url: string): Promise<void> {
+  const opened = await vscode.commands.executeCommand('simpleBrowser.show', url).then(
+    () => true,
+    () => false
+  );
+  if (!opened) await vscode.env.openExternal(vscode.Uri.parse(url));
+}
+
 async function previewApplication(): Promise<void> {
   const devCommand = vscode.workspace.getConfiguration('sillo').get<string>(
     'devServerCommand',
@@ -93,12 +102,12 @@ async function previewApplication(): Promise<void> {
   terminal.show();
   terminal.sendText(devCommand);
 
-  const url = baseUrl();
-  const opened = await vscode.commands.executeCommand('simpleBrowser.show', url).then(
-    () => true,
-    () => false
-  );
-  if (!opened) await vscode.env.openExternal(vscode.Uri.parse(url));
+  await openInBrowser(baseUrl());
+}
+
+async function openApiDocs(): Promise<void> {
+  const docsPath = vscode.workspace.getConfiguration('sillo').get<string>('docsPath', '/docs');
+  await openInBrowser(`${baseUrl().replace(/\/$/, '')}${docsPath}`);
 }
 
 function toSnakeCase(name: string): string {
@@ -195,10 +204,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.languages.registerHoverProvider(PYTHON, new CtxHoverProvider()),
     vscode.languages.registerCompletionItemProvider(PYTHON, new CtxCompletionProvider(), '.'),
+    vscode.languages.registerCompletionItemProvider(PYTHON, new ModelKwargCompletionProvider(), '='),
+    vscode.languages.registerDefinitionProvider(PYTHON, new ValidatedDataDefinitionProvider()),
 
     vscode.commands.registerCommand('sillo.refreshStructure', refreshAll),
     vscode.commands.registerCommand('sillo.runRoute', runRoute),
     vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
+    vscode.commands.registerCommand('sillo.openApiDocs', openApiDocs),
     vscode.commands.registerCommand('sillo.newMiddleware', newMiddleware),
     vscode.commands.registerCommand('sillo.createApp', createApp),
     vscode.commands.registerCommand('sillo.showBestPractices', () => showBestPractices(context)),

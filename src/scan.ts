@@ -62,6 +62,33 @@ async function findPythonFiles(): Promise<vscode.Uri[]> {
   );
 }
 
+export interface MigrationInfo {
+  name: string;
+  uri: vscode.Uri;
+}
+
+/**
+ * Migration files on disk, sorted by filename (Sillo names them
+ * `NNNN_description.py`, so filename order is application order).
+ *
+ * This lists what exists, not what's applied — telling those apart needs a
+ * database connection, which is exactly what `sillo db:status` is for (see
+ * the "Sillo: Migration Status" command). Parsing that command's coloured,
+ * human-oriented terminal output well enough to show "applied" state here
+ * reliably was judged not worth the fragility.
+ */
+export async function scanMigrations(): Promise<MigrationInfo[]> {
+  const files = await vscode.workspace.findFiles(
+    '**/migrations/*.py',
+    '**/{node_modules,.venv,venv,.git,__pycache__,dist,build}/**',
+    500
+  );
+  return files
+    .filter((uri) => !uri.path.endsWith('__init__.py'))
+    .map((uri) => ({ name: uri.path.split('/').pop() ?? uri.path, uri }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function joinPath(prefix: string, path: string): string {
   const left = prefix.replace(/\/$/, '');
   const right = path.startsWith('/') ? path : `/${path}`;

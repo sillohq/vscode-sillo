@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { scanWorkspace, RouteInfo, RouterInfo, ModelInfo, MiddlewareInfo } from './scan';
+import { scanWorkspace, scanMigrations, RouteInfo, RouterInfo, ModelInfo, MiddlewareInfo, MigrationInfo } from './scan';
 
 type Node =
   | { kind: 'group'; label: string; children: Node[] }
@@ -7,6 +7,7 @@ type Node =
   | { kind: 'route'; info: RouteInfo }
   | { kind: 'model'; info: ModelInfo }
   | { kind: 'middleware'; info: MiddlewareInfo }
+  | { kind: 'migration'; info: MigrationInfo }
   | { kind: 'empty'; label: string };
 
 export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
@@ -20,7 +21,7 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
   }
 
   refresh(): void {
-    scanWorkspace().then((scan) => {
+    Promise.all([scanWorkspace(), scanMigrations()]).then(([scan, migrations]) => {
       const routeChild = (route: RouteInfo): Node => ({ kind: 'route', info: route });
 
       this.roots = [
@@ -50,6 +51,13 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
           children: scan.middleware.length
             ? scan.middleware.map((mw): Node => ({ kind: 'middleware', info: mw }))
             : [{ kind: 'empty', label: 'No middleware found' }],
+        },
+        {
+          kind: 'group',
+          label: 'Migrations',
+          children: migrations.length
+            ? migrations.map((m): Node => ({ kind: 'migration', info: m }))
+            : [{ kind: 'empty', label: 'No migrations found' }],
         },
       ];
       this._onDidChangeTreeData.fire();
@@ -100,6 +108,13 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
         const item = new vscode.TreeItem(info.name);
         item.iconPath = new vscode.ThemeIcon('filter');
         item.command = openAt(info.uri, info.line);
+        return item;
+      }
+      case 'migration': {
+        const { info } = element;
+        const item = new vscode.TreeItem(info.name);
+        item.iconPath = new vscode.ThemeIcon('history');
+        item.command = { command: 'vscode.open', title: 'Open', arguments: [info.uri] };
         return item;
       }
       case 'empty':
