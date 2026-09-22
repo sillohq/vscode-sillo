@@ -32,7 +32,7 @@ export class DbViewerPanel {
     });
   }
 
-  static async show(context: vscode.ExtensionContext): Promise<void> {
+  static async show(context: vscode.ExtensionContext, initialTable?: string): Promise<void> {
     if (!(await sqlite3Available())) {
       vscode.window.showErrorMessage(
         'Sillo: the "sqlite3" command isn\'t on your PATH. Install it (e.g. via your OS package manager) to use the database viewer.'
@@ -64,7 +64,16 @@ export class DbViewerPanel {
 
     try {
       const tables = await listTables(location.path);
-      instance.panel.webview.postMessage({ type: 'tables', tables });
+      if (initialTable && !tables.includes(initialTable)) {
+        vscode.window.showWarningMessage(
+          `Sillo: no table named "${initialTable}" in this database (checked Meta.table, and the class name lowercased as a fallback). Showing the table list instead.`
+        );
+      }
+      instance.panel.webview.postMessage({
+        type: 'tables',
+        tables,
+        select: initialTable && tables.includes(initialTable) ? initialTable : undefined,
+      });
     } catch (err) {
       instance.panel.webview.postMessage({ type: 'error', message: (err as Error).message });
     }
@@ -148,6 +157,7 @@ export class DbViewerPanel {
     const message = event.data;
     if (message.type === 'tables') {
       tablesEl.innerHTML = '';
+      let selectButton = null;
       for (const table of message.tables) {
         const button = document.createElement('button');
         button.textContent = table;
@@ -159,7 +169,9 @@ export class DbViewerPanel {
           vscode.postMessage({ type: 'loadTable', table });
         });
         tablesEl.appendChild(button);
+        if (table === message.select) selectButton = button;
       }
+      if (selectButton) selectButton.click();
       return;
     }
     if (message.type === 'error') {

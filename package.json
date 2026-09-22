@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -65,6 +65,11 @@
           "command": "sillo.runRouteFromTree",
           "when": "view == sillo.structure && viewItem == sillo.route",
           "group": "inline@2"
+        },
+        {
+          "command": "sillo.viewModelData",
+          "when": "view == sillo.structure && viewItem == sillo.model",
+          "group": "inline"
         }
       ]
     },
@@ -156,6 +161,12 @@
         "title": "Sillo: Try Request",
         "category": "Sillo",
         "icon": "$(play)"
+      },
+      {
+        "command": "sillo.viewModelData",
+        "title": "Sillo: View Table Data",
+        "category": "Sillo",
+        "icon": "$(table)"
       }
     ],
     "configuration": {

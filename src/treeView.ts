@@ -109,14 +109,16 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
         const { info } = element;
         const item = new vscode.TreeItem(info.name);
         item.iconPath = new vscode.ThemeIcon('database');
-        item.description = info.base;
+        item.description = `${info.base} · table "${info.table}"`;
         item.command = openAt(info.uri, info.line);
+        item.contextValue = 'sillo.model';
         return item;
       }
       case 'middleware': {
         const { info } = element;
         const item = new vscode.TreeItem(info.name);
         item.iconPath = new vscode.ThemeIcon('filter');
+        item.description = info.kind === 'applied' ? 'built-in, applied' : undefined;
         item.command = openAt(info.uri, info.line);
         return item;
       }

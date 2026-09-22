@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { CTX_MEMBERS } from './ctxApi';
 import { SilloStructureProvider } from './treeView';
 import { RouteCodeLensProvider, makeRunRouteCommand } from './requestRunner';
-import { RouteInfo } from './scan';
+import { RouteInfo, ModelInfo } from './scan';
 import { registerDiagnostics } from './diagnostics';
 import { ModelKwargCompletionProvider, ValidatedDataDefinitionProvider } from './models';
 import { DbViewerPanel } from './dbViewerPanel';
@@ -217,6 +217,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
     vscode.commands.registerCommand('sillo.openApiDocs', openApiDocs),
     vscode.commands.registerCommand('sillo.openDatabaseViewer', () => DbViewerPanel.show(context)),
+    vscode.commands.registerCommand('sillo.viewModelData', (node: { info: ModelInfo }) =>
+      DbViewerPanel.show(context, node.info.table)
+    ),
     vscode.commands.registerCommand('sillo.newMiddleware', newMiddleware),
     vscode.commands.registerCommand('sillo.createApp', createApp),
     vscode.commands.registerCommand('sillo.showBestPractices', () => showBestPractices(context)),
