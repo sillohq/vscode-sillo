@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -196,6 +196,11 @@
           "type": "string",
           "default": "/docs",
           "description": "Path the app serves its OpenAPI/Swagger UI on, for \"Sillo: Open API Docs\"."
+        },
+        "sillo.databasePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the project's SQLite database, for the DB viewer. Absolute, or relative to the project's pyproject.toml directory. Only needed when auto-detection (reading sqlite:// out of .env / app/config.py, or finding a single *.db/*.sqlite file under storage/) doesn't find it."
         }
       }
     }

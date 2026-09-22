@@ -43,7 +43,8 @@ export class DbViewerPanel {
     const location = await findDatabase();
     if (location.kind === 'not-found') {
       vscode.window.showErrorMessage(
-        'Sillo: couldn\'t find a sqlite:// DATABASE_URL in .env / config.py in this workspace.'
+        `Sillo: couldn't find the database. Checked: ${location.checked.join(', ')}. ` +
+          'Set "sillo.databasePath" (absolute, or relative to the project\'s pyproject.toml) to point at it directly.'
       );
       return;
     }

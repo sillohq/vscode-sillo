@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import * as path from 'node:path';
+import { findProjectRoot, readFileSafe } from './project';
 
 /**
  * Finding and reading the project's SQLite database, for the DB viewer.
@@ -19,42 +20,73 @@ const ANY_DB_URL = /(?:database_url|DATABASE_URL)\s*[:=]\s*["']?(\w+):\/\//;
 export type DbLocation =
   | { kind: 'sqlite'; path: string }
   | { kind: 'unsupported'; scheme: string }
-  | { kind: 'not-found' };
+  | { kind: 'not-found'; checked: string[] };
 
-async function readFileSafe(uri: vscode.Uri): Promise<string | undefined> {
+/** A `sillo://...` URL is relative to the project it's configured for, not
+ * necessarily the workspace root — a monorepo like this one opens several
+ * projects (star-ehr, starter, ...) under one root, each with its own
+ * `.env`/`config.py` a few directories down. Resolve against the directory
+ * the match was found in. */
+function resolveFrom(uri: vscode.Uri, relativePath: string): string {
+  return path.resolve(path.dirname(uri.fsPath), relativePath);
+}
+
+function checkText(uri: vscode.Uri, text: string): DbLocation | undefined {
+  const sqliteMatch = SQLITE_URL.exec(text);
+  if (sqliteMatch) return { kind: 'sqlite', path: resolveFrom(uri, sqliteMatch[1]) };
+
+  const otherMatch = ANY_DB_URL.exec(text);
+  if (otherMatch && otherMatch[1] !== 'sqlite') return { kind: 'unsupported', scheme: otherMatch[1] };
+
+  return undefined;
+}
+
+const DB_FILE = /\.(db|sqlite3?)$/i;
+
+/** Exactly one database-looking file directly under `dir`, if there is one —
+ * the last resort when nothing names the path in text anywhere. Several
+ * matches is treated the same as none: guessing wrong is worse than saying
+ * so, and `sillo.databasePath` is the way out either way. */
+async function soleDbFileIn(dir: vscode.Uri): Promise<string | undefined> {
+  let entries: [string, vscode.FileType][];
   try {
-    return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+    entries = await vscode.workspace.fs.readDirectory(dir);
   } catch {
     return undefined;
   }
+  const matches = entries.filter(([name, type]) => type === vscode.FileType.File && DB_FILE.test(name));
+  return matches.length === 1 ? path.join(dir.fsPath, matches[0][0]) : undefined;
 }
 
 export async function findDatabase(): Promise<DbLocation> {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) return { kind: 'not-found' };
+  const root = await findProjectRoot();
 
-  const candidates = await vscode.workspace.findFiles(
-    '{.env,.env.local,.env.example,**/config.py}',
-    '**/{node_modules,.venv,venv,.git,__pycache__,dist,build}/**',
-    100
-  );
+  const configuredPath = vscode.workspace.getConfiguration('sillo').get<string>('databasePath');
+  if (configuredPath) return { kind: 'sqlite', path: path.resolve(root.dir, configuredPath) };
 
-  for (const uri of candidates) {
+  // Same "nearest pyproject.toml to the active file" project as everything
+  // else (see project.ts) — a `.env` found by searching the whole workspace
+  // is exactly the bug this used to have: right file, wrong project, so a
+  // path resolved against it points at a database that was never created.
+  const checked: string[] = [];
+  for (const name of ['.env', '.env.local', '.env.example', 'app/config.py']) {
+    const uri = vscode.Uri.file(path.join(root.dir, name));
+    checked.push(uri.fsPath);
     const text = await readFileSafe(uri);
     if (!text) continue;
-
-    const sqliteMatch = SQLITE_URL.exec(text);
-    if (sqliteMatch) {
-      return { kind: 'sqlite', path: path.resolve(folder.uri.fsPath, sqliteMatch[1]) };
-    }
-
-    const otherMatch = ANY_DB_URL.exec(text);
-    if (otherMatch && otherMatch[1] !== 'sqlite') {
-      return { kind: 'unsupported', scheme: otherMatch[1] };
-    }
+    const found = checkText(uri, text);
+    if (found) return found;
   }
 
-  return { kind: 'not-found' };
+  // Nothing named a path in text — try the obvious directories directly.
+  for (const dir of ['storage', '.']) {
+    const dirUri = vscode.Uri.file(path.join(root.dir, dir));
+    checked.push(`${dirUri.fsPath}/*.db`);
+    const sole = await soleDbFileIn(dirUri);
+    if (sole) return { kind: 'sqlite', path: sole };
+  }
+
+  return { kind: 'not-found', checked };
 }
 
 function runSqlite3(dbPath: string, args: string[]): Promise<string> {
