@@ -6,6 +6,8 @@ import { RouteInfo } from './scan';
 import { registerDiagnostics } from './diagnostics';
 import { ModelKwargCompletionProvider, ValidatedDataDefinitionProvider } from './models';
 import { DbViewerPanel } from './dbViewerPanel';
+import { resolveBaseUrl, resolveDevCommand } from './config';
+import { findProjectRoot } from './project';
 
 const PYTHON: vscode.DocumentSelector = { language: 'python' };
 
@@ -80,10 +82,6 @@ async function runCommandPicker(): Promise<void> {
   if (args) runInTerminal(args);
 }
 
-function baseUrl(): string {
-  return vscode.workspace.getConfiguration('sillo').get<string>('baseUrl', 'http://127.0.0.1:8000');
-}
-
 async function openInBrowser(url: string): Promise<void> {
   const opened = await vscode.commands.executeCommand('simpleBrowser.show', url).then(
     () => true,
@@ -93,23 +91,18 @@ async function openInBrowser(url: string): Promise<void> {
 }
 
 async function previewApplication(): Promise<void> {
-  const devCommand = vscode.workspace.getConfiguration('sillo').get<string>(
-    'devServerCommand',
-    'uvicorn app.main:app --reload'
-  );
-  const folders = vscode.workspace.workspaceFolders;
-  const cwd = folders && folders.length > 0 ? folders[0].uri.fsPath : undefined;
+  const { command, root } = await resolveDevCommand();
   const terminal = vscode.window.terminals.find((t) => t.name === 'Sillo Server') ??
-    vscode.window.createTerminal({ name: 'Sillo Server', cwd });
+    vscode.window.createTerminal({ name: 'Sillo Server', cwd: root.dir });
   terminal.show();
-  terminal.sendText(devCommand);
+  terminal.sendText(command);
 
-  await openInBrowser(baseUrl());
+  await openInBrowser(await resolveBaseUrl());
 }
 
 async function openApiDocs(): Promise<void> {
   const docsPath = vscode.workspace.getConfiguration('sillo').get<string>('docsPath', '/docs');
-  await openInBrowser(`${baseUrl().replace(/\/$/, '')}${docsPath}`);
+  await openInBrowser(`${await resolveBaseUrl()}${docsPath}`);
 }
 
 function toSnakeCase(name: string): string {
@@ -120,8 +113,7 @@ function toSnakeCase(name: string): string {
 }
 
 async function newMiddleware(): Promise<void> {
-  const folders = vscode.workspace.workspaceFolders;
-  if (!folders || folders.length === 0) {
+  if (!vscode.workspace.workspaceFolders?.length) {
     vscode.window.showErrorMessage('Sillo: open a folder first.');
     return;
   }
@@ -144,8 +136,11 @@ async function newMiddleware(): Promise<void> {
     '',
   ].join('\n');
 
-  const target = vscode.Uri.joinPath(folders[0].uri, 'middleware', `${toSnakeCase(className)}.py`);
-  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(folders[0].uri, 'middleware'));
+  // The project the active file belongs to, not always the first workspace
+  // folder — this workspace alone holds several Sillo projects.
+  const root = await findProjectRoot();
+  const target = vscode.Uri.joinPath(root.uri, 'middleware', `${toSnakeCase(className)}.py`);
+  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root.uri, 'middleware'));
   await vscode.workspace.fs.writeFile(target, Buffer.from(body, 'utf8'));
   const document = await vscode.workspace.openTextDocument(target);
   await vscode.window.showTextDocument(document);

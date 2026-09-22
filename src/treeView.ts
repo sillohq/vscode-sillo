@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { scanWorkspace, scanMigrations, RouteInfo, RouterInfo, ModelInfo, MiddlewareInfo, MigrationInfo } from './scan';
+import { scanWorkspace, scanMigrations, RouteInfo, RouterInfo, ModelInfo, MiddlewareInfo, MigrationInfo, JobInfo } from './scan';
+import { findProjectRoot } from './project';
 
 type Node =
   | { kind: 'group'; label: string; children: Node[] }
@@ -7,6 +8,7 @@ type Node =
   | { kind: 'route'; info: RouteInfo }
   | { kind: 'model'; info: ModelInfo }
   | { kind: 'middleware'; info: MiddlewareInfo }
+  | { kind: 'job'; info: JobInfo }
   | { kind: 'migration'; info: MigrationInfo }
   | { kind: 'empty'; label: string };
 
@@ -21,7 +23,8 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
   }
 
   refresh(): void {
-    Promise.all([scanWorkspace(), scanMigrations()]).then(([scan, migrations]) => {
+    findProjectRoot().then(async (root) => {
+      const [scan, migrations] = await Promise.all([scanWorkspace(root.uri), scanMigrations(root.uri)]);
       const routeChild = (route: RouteInfo): Node => ({ kind: 'route', info: route });
 
       this.roots = [
@@ -51,6 +54,13 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
           children: scan.middleware.length
             ? scan.middleware.map((mw): Node => ({ kind: 'middleware', info: mw }))
             : [{ kind: 'empty', label: 'No middleware found' }],
+        },
+        {
+          kind: 'group',
+          label: 'Jobs',
+          children: scan.jobs.length
+            ? scan.jobs.map((job): Node => ({ kind: 'job', info: job }))
+            : [{ kind: 'empty', label: 'No jobs found' }],
         },
         {
           kind: 'group',
@@ -107,6 +117,13 @@ export class SilloStructureProvider implements vscode.TreeDataProvider<Node> {
         const { info } = element;
         const item = new vscode.TreeItem(info.name);
         item.iconPath = new vscode.ThemeIcon('filter');
+        item.command = openAt(info.uri, info.line);
+        return item;
+      }
+      case 'job': {
+        const { info } = element;
+        const item = new vscode.TreeItem(info.name);
+        item.iconPath = new vscode.ThemeIcon('run-all');
         item.command = openAt(info.uri, info.line);
         return item;
       }

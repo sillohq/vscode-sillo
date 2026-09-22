@@ -1,11 +1,7 @@
 import * as vscode from 'vscode';
 import { scanText, RouteInfo } from './scan';
 import { HttpClientPanel } from './httpClientPanel';
-
-function baseUrl(): string {
-  const configured = vscode.workspace.getConfiguration('sillo').get<string>('baseUrl', 'http://127.0.0.1:8000');
-  return configured.replace(/\/$/, '');
-}
+import { resolveBaseUrl } from './config';
 
 /** `{id:int}` reads fine as a type hint in source, but as a URL it's just noise. */
 function stripParamTypes(path: string): string {
@@ -13,11 +9,11 @@ function stripParamTypes(path: string): string {
 }
 
 export function makeRunRouteCommand(context: vscode.ExtensionContext) {
-  return (route: Pick<RouteInfo, 'method' | 'fullPath'>) => {
+  return async (route: Pick<RouteInfo, 'method' | 'fullPath'>) => {
     // Plain concatenation, not the URL constructor: {id} still has to read as
     // an editable placeholder in the webview's URL field, and URL would
     // percent-encode the braces into %7Bid%7D on the way in.
-    const url = baseUrl() + stripParamTypes(route.fullPath);
+    const url = (await resolveBaseUrl()) + stripParamTypes(route.fullPath);
     HttpClientPanel.showRoute(context, route.method, url);
   };
 }

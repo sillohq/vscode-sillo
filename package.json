@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -174,12 +174,12 @@
         "sillo.devServerCommand": {
           "type": "string",
           "default": "uvicorn app.main:app --reload",
-          "description": "The command used to run the app for \"Sillo: Preview Application\"."
+          "description": "The command used to run the app for \"Sillo: Preview Application\". Leave unset (this default is only a last resort) to auto-detect from [tool.sillo] app / the app.main:app-style guesses in pyproject.toml, plus HOST/PORT from .env."
         },
         "sillo.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8000",
-          "description": "Base URL the app is served on, used both to preview it and to run route requests from the editor."
+          "description": "Base URL the app is served on. Leave unset (this default is only a last resort) to auto-detect HOST/PORT from the project's .env or app/config.py."
         },
         "sillo.docsPath": {
           "type": "string",

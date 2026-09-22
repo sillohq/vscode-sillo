@@ -41,11 +41,18 @@ export interface MiddlewareInfo {
   line: number;
 }
 
+export interface JobInfo {
+  name: string;
+  uri: vscode.Uri;
+  line: number;
+}
+
 export interface WorkspaceScan {
   routers: RouterInfo[];
   standaloneRoutes: RouteInfo[];
   models: ModelInfo[];
   middleware: MiddlewareInfo[];
+  jobs: JobInfo[];
 }
 
 const ROUTE_DECORATOR = /^\s*@(\w+)\.(get|post|put|patch|delete|websocket)\(\s*["']([^"']+)["']/;
@@ -53,13 +60,18 @@ const HANDLER_DEF = /^\s*(?:async\s+)?def\s+(\w+)\s*\(/;
 const ROUTER_DECL = /(\w+)\s*=\s*Router\(([^)]*)\)/;
 const ROUTER_PREFIX = /prefix\s*=\s*["']([^"']*)["']/;
 const CLASS_DECL = /^class\s+(\w+)\s*\(([^)]*)\)\s*:/;
+const EXCLUDE_GLOB = '**/{node_modules,.venv,venv,.git,__pycache__,dist,build}/**';
 
-async function findPythonFiles(): Promise<vscode.Uri[]> {
-  return vscode.workspace.findFiles(
-    '**/*.py',
-    '**/{node_modules,.venv,venv,.git,__pycache__,dist,build}/**',
-    2000
-  );
+/**
+ * Scoped to one project's directory (see project.ts) rather than the whole
+ * VS Code workspace — this repo alone opens several Sillo projects side by
+ * side, and a workspace-wide scan mixes their routes, models and jobs
+ * together in the tree view with no indication any of it came from a
+ * different app.
+ */
+async function findPythonFiles(root?: vscode.Uri): Promise<vscode.Uri[]> {
+  const pattern = root ? new vscode.RelativePattern(root, '**/*.py') : '**/*.py';
+  return vscode.workspace.findFiles(pattern, EXCLUDE_GLOB, 2000);
 }
 
 export interface MigrationInfo {
@@ -77,12 +89,9 @@ export interface MigrationInfo {
  * human-oriented terminal output well enough to show "applied" state here
  * reliably was judged not worth the fragility.
  */
-export async function scanMigrations(): Promise<MigrationInfo[]> {
-  const files = await vscode.workspace.findFiles(
-    '**/migrations/*.py',
-    '**/{node_modules,.venv,venv,.git,__pycache__,dist,build}/**',
-    500
-  );
+export async function scanMigrations(root?: vscode.Uri): Promise<MigrationInfo[]> {
+  const pattern = root ? new vscode.RelativePattern(root, '**/migrations/*.py') : '**/migrations/*.py';
+  const files = await vscode.workspace.findFiles(pattern, EXCLUDE_GLOB, 500);
   return files
     .filter((uri) => !uri.path.endsWith('__init__.py'))
     .map((uri) => ({ name: uri.path.split('/').pop() ?? uri.path, uri }))
@@ -107,6 +116,7 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
   const standaloneRoutes: RouteInfo[] = [];
   const models: ModelInfo[] = [];
   const middleware: MiddlewareInfo[] = [];
+  const jobs: JobInfo[] = [];
 
   const lines = text.split(/\r?\n/);
   const routerByVar = new Map<string, RouterInfo>();
@@ -136,6 +146,10 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
       const [, name, bases] = classMatch;
       if (/\bMiddleware\b/.test(bases)) {
         middleware.push({ name, uri, line: i });
+      } else if (/\bJob\b/.test(bases)) {
+        // sillo.work.queue.job.Job — subclass and implement handle(), per
+        // its own docstring example (class SendWelcomeEmail(Job): ...).
+        jobs.push({ name, uri, line: i });
       } else if (/\bModel\b/.test(bases)) {
         models.push({ name, base: bases.trim(), uri, line: i });
       }
@@ -173,16 +187,17 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
     else standaloneRoutes.push(route);
   }
 
-  return { routers, standaloneRoutes, models, middleware };
+  return { routers, standaloneRoutes, models, middleware, jobs };
 }
 
-export async function scanWorkspace(): Promise<WorkspaceScan> {
+export async function scanWorkspace(root?: vscode.Uri): Promise<WorkspaceScan> {
   const routers: RouterInfo[] = [];
   const standaloneRoutes: RouteInfo[] = [];
   const models: ModelInfo[] = [];
   const middleware: MiddlewareInfo[] = [];
+  const jobs: JobInfo[] = [];
 
-  const files = await findPythonFiles();
+  const files = await findPythonFiles(root);
 
   for (const uri of files) {
     let text: string;
@@ -196,7 +211,8 @@ export async function scanWorkspace(): Promise<WorkspaceScan> {
     standaloneRoutes.push(...scanned.standaloneRoutes);
     models.push(...scanned.models);
     middleware.push(...scanned.middleware);
+    jobs.push(...scanned.jobs);
   }
 
-  return { routers, standaloneRoutes, models, middleware };
+  return { routers, standaloneRoutes, models, middleware, jobs };
 }
