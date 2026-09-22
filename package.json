@@ -1,0 +1,91 @@
+{
+  "name": "sillo",
+  "displayName": "Sillo",
+  "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
+  "version": "0.1.0",
+  "publisher": "sillohq",
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Other"
+  ],
+  "keywords": [
+    "sillo",
+    "python",
+    "web framework"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sillohq/vscode-sillo"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "snippets": [
+      {
+        "language": "python",
+        "path": "./snippets/python.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "sillo.runCommand",
+        "title": "Sillo: Run CLI Command...",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.listRoutes",
+        "title": "Sillo: List Routes",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.dbMake",
+        "title": "Sillo: Make Migration (db:make)",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.dbMigrate",
+        "title": "Sillo: Run Migrations (db:migrate)",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.dbStatus",
+        "title": "Sillo: Migration Status (db:status)",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.dbRollback",
+        "title": "Sillo: Rollback Migration (db:rollback)",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.queueWork",
+        "title": "Sillo: Start Queue Worker (queue:work)",
+        "category": "Sillo"
+      }
+    ],
+    "configuration": {
+      "title": "Sillo",
+      "properties": {
+        "sillo.cliCommand": {
+          "type": "string",
+          "default": "sillo",
+          "description": "The command used to invoke the Sillo CLI (e.g. \"sillo\", \"uv run sillo\")."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
