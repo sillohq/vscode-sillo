@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -35,7 +35,7 @@
         {
           "id": "sillo",
           "title": "Sillo",
-          "icon": "images/activity-icon.svg"
+          "icon": "images/activity-icon.png"
         }
       ]
     },
@@ -126,6 +126,11 @@
       {
         "command": "sillo.openApiDocs",
         "title": "Sillo: Open API Docs",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.openDatabaseViewer",
+        "title": "Sillo: Open Database Viewer",
         "category": "Sillo"
       }
     ],

@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import { CTX_MEMBERS } from './ctxApi';
 import { SilloStructureProvider } from './treeView';
-import { RouteCodeLensProvider, runRoute } from './requestRunner';
+import { RouteCodeLensProvider, makeRunRouteCommand } from './requestRunner';
 import { registerDiagnostics } from './diagnostics';
 import { ModelKwargCompletionProvider, ValidatedDataDefinitionProvider } from './models';
+import { DbViewerPanel } from './dbViewerPanel';
 
 const PYTHON: vscode.DocumentSelector = { language: 'python' };
 
@@ -208,9 +209,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerDefinitionProvider(PYTHON, new ValidatedDataDefinitionProvider()),
 
     vscode.commands.registerCommand('sillo.refreshStructure', refreshAll),
-    vscode.commands.registerCommand('sillo.runRoute', runRoute),
+    vscode.commands.registerCommand('sillo.runRoute', makeRunRouteCommand(context)),
     vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
     vscode.commands.registerCommand('sillo.openApiDocs', openApiDocs),
+    vscode.commands.registerCommand('sillo.openDatabaseViewer', () => DbViewerPanel.show(context)),
     vscode.commands.registerCommand('sillo.newMiddleware', newMiddleware),
     vscode.commands.registerCommand('sillo.createApp', createApp),
     vscode.commands.registerCommand('sillo.showBestPractices', () => showBestPractices(context)),
