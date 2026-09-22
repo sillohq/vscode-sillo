@@ -15,10 +15,20 @@ import { findProjectRoot, readFileSafe } from './project';
  */
 
 const SQLITE_URL = /sqlite:\/\/([^\s"'\\]+)/;
+const POSTGRES_URL = /(postgres(?:ql)?:\/\/[^\s"'\\]+)/;
 const ANY_DB_URL = /(?:database_url|DATABASE_URL)\s*[:=]\s*["']?(\w+):\/\//;
+
+export interface PgConnection {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+}
 
 export type DbLocation =
   | { kind: 'sqlite'; path: string }
+  | { kind: 'postgres'; conn: PgConnection }
   | { kind: 'unsupported'; scheme: string }
   | { kind: 'not-found'; checked: string[] };
 
@@ -31,12 +41,28 @@ function resolveFrom(uri: vscode.Uri, relativePath: string): string {
   return path.resolve(path.dirname(uri.fsPath), relativePath);
 }
 
+function parsePostgresUrl(url: string): PgConnection {
+  const parsed = new URL(url);
+  return {
+    host: parsed.hostname || 'localhost',
+    port: parsed.port ? Number(parsed.port) : 5432,
+    user: decodeURIComponent(parsed.username || 'postgres'),
+    password: decodeURIComponent(parsed.password || ''),
+    database: decodeURIComponent(parsed.pathname.replace(/^\//, '')) || 'postgres',
+  };
+}
+
 function checkText(uri: vscode.Uri, text: string): DbLocation | undefined {
   const sqliteMatch = SQLITE_URL.exec(text);
   if (sqliteMatch) return { kind: 'sqlite', path: resolveFrom(uri, sqliteMatch[1]) };
 
+  const postgresMatch = POSTGRES_URL.exec(text);
+  if (postgresMatch) return { kind: 'postgres', conn: parsePostgresUrl(postgresMatch[1]) };
+
   const otherMatch = ANY_DB_URL.exec(text);
-  if (otherMatch && otherMatch[1] !== 'sqlite') return { kind: 'unsupported', scheme: otherMatch[1] };
+  if (otherMatch && otherMatch[1] !== 'sqlite' && !/^postgres/.test(otherMatch[1])) {
+    return { kind: 'unsupported', scheme: otherMatch[1] };
+  }
 
   return undefined;
 }
@@ -60,8 +86,17 @@ async function soleDbFileIn(dir: vscode.Uri): Promise<string | undefined> {
 
 export async function findDatabase(): Promise<DbLocation> {
   const root = await findProjectRoot();
+  const config = vscode.workspace.getConfiguration('sillo');
 
-  const configuredPath = vscode.workspace.getConfiguration('sillo').get<string>('databasePath');
+  const configuredUrl = config.get<string>('databaseUrl');
+  if (configuredUrl) {
+    const sqliteMatch = SQLITE_URL.exec(configuredUrl);
+    if (sqliteMatch) return { kind: 'sqlite', path: path.resolve(root.dir, sqliteMatch[1]) };
+    const postgresMatch = POSTGRES_URL.exec(configuredUrl);
+    if (postgresMatch) return { kind: 'postgres', conn: parsePostgresUrl(postgresMatch[1]) };
+  }
+
+  const configuredPath = config.get<string>('databasePath');
   if (configuredPath) return { kind: 'sqlite', path: path.resolve(root.dir, configuredPath) };
 
   // Same "nearest pyproject.toml to the active file" project as everything
@@ -89,24 +124,52 @@ export async function findDatabase(): Promise<DbLocation> {
   return { kind: 'not-found', checked };
 }
 
-function runSqlite3(dbPath: string, args: string[]): Promise<string> {
+function run(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('sqlite3', [dbPath, ...args], { maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(command, args, { maxBuffer: 32 * 1024 * 1024, env }, (err, stdout, stderr) => {
       if (err) reject(new Error(stderr || err.message));
       else resolve(stdout);
     });
   });
 }
 
-export async function sqlite3Available(): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile('sqlite3', ['--version'], (err) => resolve(!err));
-  });
+function runSqlite3(dbPath: string, args: string[]): Promise<string> {
+  return run('sqlite3', [dbPath, ...args]);
 }
 
-export async function listTables(dbPath: string): Promise<string[]> {
-  const out = await runSqlite3(dbPath, ['.tables']);
-  return out.split(/\s+/).map((t) => t.trim()).filter(Boolean);
+/** `--no-password` refuses to prompt rather than hang the extension host if
+ * the password is wrong; the real one goes through `PGPASSWORD`, not an
+ * argument, so it doesn't show up in `ps`. */
+function runPsql(conn: PgConnection, args: string[]): Promise<string> {
+  return run(
+    'psql',
+    ['-h', conn.host, '-p', String(conn.port), '-U', conn.user, '-d', conn.database, '--no-password', ...args],
+    { ...process.env, PGPASSWORD: conn.password }
+  );
+}
+
+export async function dbToolAvailable(location: DbLocation): Promise<{ ok: boolean; tool: string }> {
+  const tool = location.kind === 'postgres' ? 'psql' : 'sqlite3';
+  const ok = await new Promise<boolean>((resolve) => {
+    execFile(tool, ['--version'], (err) => resolve(!err));
+  });
+  return { ok, tool };
+}
+
+export async function listTables(location: DbLocation): Promise<string[]> {
+  if (location.kind === 'postgres') {
+    const csv = await runPsql(location.conn, [
+      '--csv',
+      '-c',
+      "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;",
+    ]);
+    return parseCsv(csv).slice(1).map((row) => row[0]).filter(Boolean);
+  }
+  if (location.kind === 'sqlite') {
+    const out = await runSqlite3(location.path, ['.tables']);
+    return out.split(/\s+/).map((t) => t.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 export interface TableData {
@@ -114,12 +177,17 @@ export interface TableData {
   rows: string[][];
 }
 
-export async function queryTable(dbPath: string, table: string, limit = 200): Promise<TableData> {
+export async function queryTable(location: DbLocation, table: string, limit = 200): Promise<TableData> {
   // `table` only ever comes from listTables()'s own output — a real
-  // identifier sqlite already agreed to — so quoting it into the SQL string
-  // here doesn't take arbitrary input.
+  // identifier the database itself already agreed to — so quoting it into
+  // the SQL string here doesn't take arbitrary input.
   const sql = `SELECT * FROM "${table}" LIMIT ${limit};`;
-  const csv = await runSqlite3(dbPath, ['-header', '-csv', sql]);
+  const csv =
+    location.kind === 'postgres'
+      ? await runPsql(location.conn, ['--csv', '-c', sql])
+      : location.kind === 'sqlite'
+        ? await runSqlite3(location.path, ['-header', '-csv', sql])
+        : '';
   const rows = parseCsv(csv);
   if (rows.length === 0) return { columns: [], rows: [] };
   return { columns: rows[0], rows: rows.slice(1) };

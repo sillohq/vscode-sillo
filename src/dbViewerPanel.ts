@@ -1,11 +1,20 @@
 import * as vscode from 'vscode';
-import { findDatabase, sqlite3Available, listTables, queryTable } from './db';
+import { findDatabase, dbToolAvailable, listTables, queryTable, DbLocation } from './db';
+
+function describeLocation(location: DbLocation): string {
+  if (location.kind === 'sqlite') return location.path;
+  if (location.kind === 'postgres') {
+    const { conn } = location;
+    return `postgres://${conn.user}@${conn.host}:${conn.port}/${conn.database}`;
+  }
+  return '';
+}
 
 export class DbViewerPanel {
   private static current: DbViewerPanel | undefined;
 
   private readonly panel: vscode.WebviewPanel;
-  private dbPath: string | undefined;
+  private location: DbLocation | undefined;
 
   private constructor(context: vscode.ExtensionContext) {
     this.panel = vscode.window.createWebviewPanel(
@@ -21,9 +30,9 @@ export class DbViewerPanel {
     });
 
     this.panel.webview.onDidReceiveMessage(async (message) => {
-      if (message?.type === 'loadTable' && this.dbPath) {
+      if (message?.type === 'loadTable' && this.location) {
         try {
-          const data = await queryTable(this.dbPath, message.table);
+          const data = await queryTable(this.location, message.table);
           this.panel.webview.postMessage({ type: 'table', table: message.table, ...data });
         } catch (err) {
           this.panel.webview.postMessage({ type: 'error', message: (err as Error).message });
@@ -33,24 +42,25 @@ export class DbViewerPanel {
   }
 
   static async show(context: vscode.ExtensionContext, initialTable?: string): Promise<void> {
-    if (!(await sqlite3Available())) {
-      vscode.window.showErrorMessage(
-        'Sillo: the "sqlite3" command isn\'t on your PATH. Install it (e.g. via your OS package manager) to use the database viewer.'
-      );
-      return;
-    }
-
     const location = await findDatabase();
     if (location.kind === 'not-found') {
       vscode.window.showErrorMessage(
         `Sillo: couldn't find the database. Checked: ${location.checked.join(', ')}. ` +
-          'Set "sillo.databasePath" (absolute, or relative to the project\'s pyproject.toml) to point at it directly.'
+          'Set "sillo.databaseUrl" or "sillo.databasePath" to point at it directly.'
       );
       return;
     }
     if (location.kind === 'unsupported') {
       vscode.window.showErrorMessage(
-        `Sillo: the database viewer only supports SQLite right now, and this project's DATABASE_URL uses "${location.scheme}://". Use a proper DB client for that.`
+        `Sillo: the database viewer supports SQLite and PostgreSQL, and this project's DATABASE_URL uses "${location.scheme}://". Set "sillo.databaseUrl" to a postgres:// URL if that's actually reachable, or use a proper DB client for ${location.scheme}.`
+      );
+      return;
+    }
+
+    const { ok, tool } = await dbToolAvailable(location);
+    if (!ok) {
+      vscode.window.showErrorMessage(
+        `Sillo: the "${tool}" command isn't on your PATH. Install it (e.g. via your OS package manager) to use the database viewer.`
       );
       return;
     }
@@ -59,12 +69,12 @@ export class DbViewerPanel {
       DbViewerPanel.current = new DbViewerPanel(context);
     }
     const instance = DbViewerPanel.current;
-    instance.dbPath = location.path;
+    instance.location = location;
     instance.panel.reveal(vscode.ViewColumn.Beside, true);
-    instance.panel.webview.html = instance.render(location.path);
+    instance.panel.webview.html = instance.render(describeLocation(location));
 
     try {
-      const tables = await listTables(location.path);
+      const tables = await listTables(location);
       if (initialTable && !tables.includes(initialTable)) {
         vscode.window.showWarningMessage(
           `Sillo: no table named "${initialTable}" in this database (checked Meta.table, and the class name lowercased as a fallback). Showing the table list instead.`
@@ -80,7 +90,7 @@ export class DbViewerPanel {
     }
   }
 
-  private render(dbPath: string): string {
+  private render(description: string): string {
     const nonce = Array.from({ length: 16 }, () => Math.random().toString(36)[2]).join('');
     return /* html */ `<!doctype html>
 <html>
@@ -143,7 +153,7 @@ export class DbViewerPanel {
 </head>
 <body>
   <div id="sidebar">
-    <div class="path">${dbPath}</div>
+    <div class="path">${description}</div>
     <div id="tables"></div>
   </div>
   <div id="main"><div id="empty">Pick a table.</div></div>

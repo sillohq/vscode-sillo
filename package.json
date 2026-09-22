@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
@@ -115,6 +115,16 @@
         "category": "Sillo"
       },
       {
+        "command": "sillo.openApiDocs",
+        "title": "Sillo: Open API Docs",
+        "category": "Sillo"
+      },
+      {
+        "command": "sillo.openDatabaseViewer",
+        "title": "Sillo: Open Database Viewer",
+        "category": "Sillo"
+      },
+      {
         "command": "sillo.newMiddleware",
         "title": "Sillo: New Middleware...",
         "category": "Sillo"
@@ -136,21 +146,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "sillo.showBestPractices",
-        "title": "Sillo: Show Best Practices",
-        "category": "Sillo"
-      },
-      {
-        "command": "sillo.openApiDocs",
-        "title": "Sillo: Open API Docs",
-        "category": "Sillo"
-      },
-      {
-        "command": "sillo.openDatabaseViewer",
-        "title": "Sillo: Open Database Viewer",
-        "category": "Sillo"
-      },
-      {
         "command": "sillo.openRouteDefinition",
         "title": "Sillo: Open Route Definition",
         "category": "Sillo",
@@ -167,6 +162,11 @@
         "title": "Sillo: View Table Data",
         "category": "Sillo",
         "icon": "$(table)"
+      },
+      {
+        "command": "sillo.showBestPractices",
+        "title": "Sillo: Show Best Practices",
+        "category": "Sillo"
       }
     ],
     "configuration": {
@@ -201,6 +201,11 @@
           "type": "string",
           "default": "",
           "description": "Path to the project's SQLite database, for the DB viewer. Absolute, or relative to the project's pyproject.toml directory. Only needed when auto-detection (reading sqlite:// out of .env / app/config.py, or finding a single *.db/*.sqlite file under storage/) doesn't find it."
+        },
+        "sillo.databaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Full sqlite:// or postgres:// connection URL for the DB viewer, checked before sillo.databasePath and before auto-detection. Use this for Postgres, or when the DATABASE_URL auto-detection reads isn't the one you actually want the viewer to open."
         }
       }
     }
