@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as http from 'node:http';
 import * as https from 'node:https';
-import { scanWorkspace, RouteInfo } from './scan';
+import { scanText, RouteInfo } from './scan';
 
 const PARAM = /\{(\w+)(?::\w+)?\}/g;
 
@@ -116,17 +116,18 @@ export class RouteCodeLensProvider implements vscode.CodeLensProvider {
     this._onDidChangeCodeLenses.fire();
   }
 
-  async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
+  provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
     if (document.languageId !== 'python') return [];
 
-    // Re-scanning the whole workspace per document keeps route→prefix
-    // resolution consistent with the tree view, at the cost of doing the
-    // work again on every CodeLens refresh. Cheap enough for a regex scan.
-    const scan = await scanWorkspace();
-    const routes = [
-      ...scan.routers.flatMap((r) => r.routes),
-      ...scan.standaloneRoutes,
-    ].filter((r) => r.uri.toString() === document.uri.toString());
+    // Scanned from the live buffer (document.getText()), not disk — a
+    // workspace-wide, disk-based scan here would point a second route's
+    // CodeLens at stale line numbers for as long as the file has unsaved
+    // edits. Prefix resolution is therefore local to this file; a router
+    // declared in another module and mounted here won't get its prefix
+    // picked up, which only matters for the CodeLens's displayed/requested
+    // path, not for the tree view (which does scan the whole workspace).
+    const scan = scanText(document.uri, document.getText());
+    const routes = [...scan.routers.flatMap((r) => r.routes), ...scan.standaloneRoutes];
 
     return routes
       .filter((r) => r.method !== 'WEBSOCKET')

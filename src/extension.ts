@@ -178,10 +178,20 @@ export function activate(context: vscode.ExtensionContext): void {
   watcher.onDidCreate(refreshAll);
   watcher.onDidDelete(refreshAll);
 
+  // CodeLenses are scanned from the live buffer (see requestRunner.ts), so
+  // they need to refresh as you type, not only once the file is saved.
+  let codeLensRefreshTimer: NodeJS.Timeout | undefined;
+  const scheduleCodeLensRefresh = (document: vscode.TextDocument) => {
+    if (document.languageId !== 'python') return;
+    clearTimeout(codeLensRefreshTimer);
+    codeLensRefreshTimer = setTimeout(() => codeLensProvider.refresh(), 250);
+  };
+
   context.subscriptions.push(
     watcher,
     vscode.window.registerTreeDataProvider('sillo.structure', structureProvider),
     vscode.languages.registerCodeLensProvider(PYTHON, codeLensProvider),
+    vscode.workspace.onDidChangeTextDocument((e) => scheduleCodeLensRefresh(e.document)),
 
     vscode.languages.registerHoverProvider(PYTHON, new CtxHoverProvider()),
     vscode.languages.registerCompletionItemProvider(PYTHON, new CtxCompletionProvider(), '.'),

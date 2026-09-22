@@ -68,6 +68,87 @@ function joinPath(prefix: string, path: string): string {
   return `${left}${right}` || '/';
 }
 
+/**
+ * Scans one file's text. Split out of `scanWorkspace` so a document already
+ * open in the editor can be scanned from its live buffer — the tree view and
+ * diagnostics only need the on-disk version, but a CodeLens computed against
+ * disk content for a document with unsaved edits points at stale lines the
+ * moment there's more than one route in the file.
+ */
+export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
+  const routers: RouterInfo[] = [];
+  const standaloneRoutes: RouteInfo[] = [];
+  const models: ModelInfo[] = [];
+  const middleware: MiddlewareInfo[] = [];
+
+  const lines = text.split(/\r?\n/);
+  const routerByVar = new Map<string, RouterInfo>();
+
+  // Pass 1: router declarations and class definitions can appear anywhere.
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const routerMatch = ROUTER_DECL.exec(line);
+    if (routerMatch) {
+      const [, varName, args] = routerMatch;
+      const prefixMatch = ROUTER_PREFIX.exec(args);
+      const info: RouterInfo = {
+        varName,
+        prefix: prefixMatch ? prefixMatch[1] : '',
+        uri,
+        line: i,
+        routes: [],
+      };
+      routerByVar.set(varName, info);
+      routers.push(info);
+      continue;
+    }
+
+    const classMatch = CLASS_DECL.exec(line);
+    if (classMatch) {
+      const [, name, bases] = classMatch;
+      if (/\bMiddleware\b/.test(bases)) {
+        middleware.push({ name, uri, line: i });
+      } else if (/\bModel\b/.test(bases)) {
+        models.push({ name, base: bases.trim(), uri, line: i });
+      }
+      continue;
+    }
+  }
+
+  // Pass 2: route decorators, resolved against routers found in this file.
+  for (let i = 0; i < lines.length; i++) {
+    const routeMatch = ROUTE_DECORATOR.exec(lines[i]);
+    if (!routeMatch) continue;
+    const [, receiver, method, path] = routeMatch;
+
+    let handlerName = '';
+    for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      const handlerMatch = HANDLER_DEF.exec(lines[j]);
+      if (handlerMatch) {
+        handlerName = handlerMatch[1];
+        break;
+      }
+      if (!lines[j].trim().startsWith('@') && lines[j].trim() !== '') break;
+    }
+
+    const router = routerByVar.get(receiver);
+    const route: RouteInfo = {
+      method: method.toUpperCase(),
+      path,
+      fullPath: joinPath(router?.prefix ?? '', path),
+      handlerName,
+      uri,
+      line: i,
+    };
+
+    if (router) router.routes.push(route);
+    else standaloneRoutes.push(route);
+  }
+
+  return { routers, standaloneRoutes, models, middleware };
+}
+
 export async function scanWorkspace(): Promise<WorkspaceScan> {
   const routers: RouterInfo[] = [];
   const standaloneRoutes: RouteInfo[] = [];
@@ -83,68 +164,11 @@ export async function scanWorkspace(): Promise<WorkspaceScan> {
     } catch {
       continue;
     }
-    const lines = text.split(/\r?\n/);
-    const routerByVar = new Map<string, RouterInfo>();
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      const routerMatch = ROUTER_DECL.exec(line);
-      if (routerMatch) {
-        const [, varName, args] = routerMatch;
-        const prefixMatch = ROUTER_PREFIX.exec(args);
-        const info: RouterInfo = {
-          varName,
-          prefix: prefixMatch ? prefixMatch[1] : '',
-          uri,
-          line: i,
-          routes: [],
-        };
-        routerByVar.set(varName, info);
-        routers.push(info);
-        continue;
-      }
-
-      const classMatch = CLASS_DECL.exec(line);
-      if (classMatch) {
-        const [, name, bases] = classMatch;
-        if (/\bMiddleware\b/.test(bases)) {
-          middleware.push({ name, uri, line: i });
-        } else if (/\bModel\b/.test(bases)) {
-          models.push({ name, base: bases.trim(), uri, line: i });
-        }
-        continue;
-      }
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-      const routeMatch = ROUTE_DECORATOR.exec(lines[i]);
-      if (!routeMatch) continue;
-      const [, receiver, method, path] = routeMatch;
-
-      let handlerName = '';
-      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
-        const handlerMatch = HANDLER_DEF.exec(lines[j]);
-        if (handlerMatch) {
-          handlerName = handlerMatch[1];
-          break;
-        }
-        if (!lines[j].trim().startsWith('@') && lines[j].trim() !== '') break;
-      }
-
-      const router = routerByVar.get(receiver);
-      const route: RouteInfo = {
-        method: method.toUpperCase(),
-        path,
-        fullPath: joinPath(router?.prefix ?? '', path),
-        handlerName,
-        uri,
-        line: i,
-      };
-
-      if (router) router.routes.push(route);
-      else standaloneRoutes.push(route);
-    }
+    const scanned = scanText(uri, text);
+    routers.push(...scanned.routers);
+    standaloneRoutes.push(...scanned.standaloneRoutes);
+    models.push(...scanned.models);
+    middleware.push(...scanned.middleware);
   }
 
   return { routers, standaloneRoutes, models, middleware };
