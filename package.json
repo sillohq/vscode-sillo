@@ -30,50 +30,13 @@
         "path": "./snippets/python.json"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "sillo",
-          "title": "Sillo",
-          "icon": "images/activity-icon.png"
-        }
-      ]
-    },
-    "views": {
-      "sillo": [
-        {
-          "id": "sillo.structure",
-          "name": "Application Structure"
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "sillo.refreshStructure",
-          "when": "view == sillo.structure",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "sillo.openRouteDefinition",
-          "when": "view == sillo.structure && viewItem == sillo.route",
-          "group": "inline@1"
-        },
-        {
-          "command": "sillo.runRouteFromTree",
-          "when": "view == sillo.structure && viewItem == sillo.route",
-          "group": "inline@2"
-        },
-        {
-          "command": "sillo.viewModelData",
-          "when": "view == sillo.structure && viewItem == sillo.model",
-          "group": "inline"
-        }
-      ]
-    },
     "commands": [
+      {
+        "command": "sillo.configureProject",
+        "title": "Sillo: Configure Project...",
+        "category": "Sillo",
+        "icon": "$(settings-gear)"
+      },
       {
         "command": "sillo.runCommand",
         "title": "Sillo: Run CLI Command...",
