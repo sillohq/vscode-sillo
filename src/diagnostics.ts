@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { findAppEntry, findProjectRoot } from './project';
+import { scanWorkspace } from './scan';
 
 /**
  * Best-practice / correctness checks for Sillo code, shown as red squiggles.
@@ -26,6 +28,17 @@ function findAppVars(lines: string[]): Set<string> {
 
 function diagnostic(range: vscode.Range, message: string, code: string): vscode.Diagnostic {
   const diag = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Error);
+  diag.source = SOURCE;
+  diag.code = code;
+  return diag;
+}
+
+function warning(line: number, message: string, code: string): vscode.Diagnostic {
+  const diag = new vscode.Diagnostic(
+    new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER),
+    message,
+    vscode.DiagnosticSeverity.Warning
+  );
   diag.source = SOURCE;
   diag.code = code;
   return diag;
@@ -89,18 +102,72 @@ export function lint(document: vscode.TextDocument): vscode.Diagnostic[] {
 export function registerDiagnostics(context: vscode.ExtensionContext): void {
   const collection = vscode.languages.createDiagnosticCollection('sillo');
   context.subscriptions.push(collection);
+  const local = new Map<string, vscode.Diagnostic[]>();
+  const project = new Map<string, vscode.Diagnostic[]>();
+
+  const publish = () => {
+    collection.clear();
+    const all = new Set([...local.keys(), ...project.keys()]);
+    for (const key of all) {
+      const uri = vscode.Uri.parse(key);
+      collection.set(uri, [...(local.get(key) ?? []), ...(project.get(key) ?? [])]);
+    }
+  };
 
   const update = (document: vscode.TextDocument) => {
     if (document.languageId !== 'python') return;
-    collection.set(document.uri, lint(document));
+    local.set(document.uri.toString(), lint(document));
+    publish();
+  };
+
+  const auditProject = async () => {
+    const root = await findProjectRoot();
+    const [entry, scan] = await Promise.all([findAppEntry(root), scanWorkspace(root.uri)]);
+    project.clear();
+    // Without an identified application assembly module, a static scan cannot
+    // honestly know whether a router is mounted by code outside this project.
+    // Do not create noisy "not mounted" warnings; Configure Project can set
+    // sillo.appEntry for projects that do not use [tool.sillo] app.
+    if (!entry) {
+      publish();
+      return;
+    }
+    const add = (uri: vscode.Uri, diag: vscode.Diagnostic) => {
+      const key = uri.toString();
+      project.set(key, [...(project.get(key) ?? []), diag]);
+    };
+    for (const router of scan.routers) {
+      if (!router.mounted) {
+        add(router.uri, warning(router.line, `Router "${router.varName}" is not mounted. Call application.mount_router(${router.varName}).`, 'router-not-mounted'));
+      }
+    }
+    for (const middleware of scan.middleware) {
+      if (middleware.kind === 'defined' && !middleware.registered) {
+        add(middleware.uri, warning(middleware.line, `Middleware "${middleware.name}" is not registered. Call application.use(${middleware.name}(...)).`, 'middleware-not-registered'));
+      }
+    }
+    publish();
   };
 
   vscode.workspace.textDocuments.forEach(update);
+  void auditProject();
+
+  let auditTimer: NodeJS.Timeout | undefined;
+  const scheduleAudit = () => {
+    clearTimeout(auditTimer);
+    auditTimer = setTimeout(() => void auditProject(), 350);
+  };
 
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument(update),
-    vscode.workspace.onDidChangeTextDocument((e) => update(e.document)),
-    vscode.workspace.onDidSaveTextDocument(update),
-    vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri))
+    vscode.workspace.onDidChangeTextDocument((e) => { update(e.document); scheduleAudit(); }),
+    vscode.workspace.onDidSaveTextDocument((document) => { update(document); scheduleAudit(); }),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      local.delete(document.uri.toString());
+      publish();
+    }),
+    vscode.workspace.onDidCreateFiles(scheduleAudit),
+    vscode.workspace.onDidDeleteFiles(scheduleAudit),
+    { dispose: () => clearTimeout(auditTimer) }
   );
 }
