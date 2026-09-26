@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findProjectRoot, findServerAddress, findAppEntry, ProjectRoot } from './project';
+import { findProjectRoot, findServerAddress, ProjectRoot } from './project';
 
 /**
  * The base URL to test routes against.
@@ -29,12 +29,9 @@ export async function resolveBaseUrl(): Promise<string> {
 /**
  * The command to run the dev server with.
  *
- * Same "explicit setting wins, otherwise read the project" shape as
- * `resolveBaseUrl`: `sillo.devServerCommand` defaults to `uvicorn
- * app.main:app --reload`, which is only right for a project that actually
- * uses that layout. `findAppEntry` reads the real one — `[tool.sillo] app`
- * in `pyproject.toml`, or the same `app.main:app` / `main:app` / `app:app`
- * guesses `sillo`'s own CLI tries, in that order.
+ * An explicit workspace setting wins. Otherwise use Sillo's own development
+ * command, which reads `[tool.sillo] app` and owns the reload/logging
+ * experience instead of the extension reconstructing a uvicorn invocation.
  */
 export async function resolveDevCommand(): Promise<{ command: string; root: ProjectRoot }> {
   const root = await findProjectRoot();
@@ -42,13 +39,5 @@ export async function resolveDevCommand(): Promise<{ command: string; root: Proj
   const explicit = inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
   if (explicit) return { command: explicit, root };
 
-  const entry = await findAppEntry(root);
-  const address = await findServerAddress(root);
-  if (entry) {
-    const host = address?.host ?? '127.0.0.1';
-    const port = address?.port ?? 8000;
-    return { command: `uvicorn ${entry.importString} --reload --host ${host} --port ${port}`, root };
-  }
-
-  return { command: inspected?.defaultValue ?? 'uvicorn app.main:app --reload', root };
+  return { command: inspected?.defaultValue ?? 'uv run sillo dev', root };
 }
