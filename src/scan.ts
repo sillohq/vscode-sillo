@@ -230,10 +230,10 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
     // line, or `.use(` alone with `XMiddleware(` starting the next.
     const appliedMatch = APPLIED_MIDDLEWARE.exec(line);
     if (appliedMatch) {
-      middleware.push({ name: appliedMatch[1], uri, line: i, kind: 'applied' });
+      middleware.push({ name: appliedMatch[1], uri, line: i, kind: 'applied', registered: true });
     } else if (USE_CALL_OPEN.test(line)) {
       const nextMatch = BARE_CLASS_CALL.exec(lines[i + 1] ?? '');
-      if (nextMatch) middleware.push({ name: nextMatch[1], uri, line: i + 1, kind: 'applied' });
+      if (nextMatch) middleware.push({ name: nextMatch[1], uri, line: i + 1, kind: 'applied', registered: true });
     }
   }
 
@@ -267,6 +267,14 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
     else standaloneRoutes.push(route);
   }
 
+  // Pass 3: a router can be declared in one module and mounted in another.
+  // Keep the local signal here; scanWorkspace reconciles it across files.
+  for (const line of lines) {
+    const mount = MOUNTED_ROUTER.exec(line);
+    const router = mount ? routerByVar.get(mount[1]) : undefined;
+    if (router) router.mounted = true;
+  }
+
   return { routers, standaloneRoutes, models, middleware, jobs };
 }
 
@@ -275,24 +283,31 @@ export async function scanWorkspace(root?: vscode.Uri): Promise<WorkspaceScan> {
   const standaloneRoutes: RouteInfo[] = [];
   const models: ModelInfo[] = [];
   const middlewareByName = new Map<string, MiddlewareInfo>();
+  const registeredMiddlewareNames = new Set<string>();
   const jobs: JobInfo[] = [];
 
   const files = await findPythonFiles(root);
+  const fileTexts: Array<{ uri: vscode.Uri; text: string }> = [];
 
   for (const uri of files) {
-    let text: string;
+    let text: string | undefined;
     try {
-      text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      // Use a live buffer when available: route CodeLenses and diagnostics
+      // should agree while the user is still typing, not only after save.
+      text = vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri.toString())?.getText();
+      if (text === undefined) text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
     } catch {
       continue;
     }
     const scanned = scanText(uri, text);
+    fileTexts.push({ uri, text });
     routers.push(...scanned.routers);
     standaloneRoutes.push(...scanned.standaloneRoutes);
     models.push(...scanned.models);
     jobs.push(...scanned.jobs);
 
     for (const mw of scanned.middleware) {
+      if (mw.kind === 'applied') registeredMiddlewareNames.add(mw.name);
       // A name seen as 'applied' anywhere and 'defined' anywhere else is one
       // middleware, and the definition is the more useful place to land —
       // an import string alone is imported randomly.
@@ -301,6 +316,38 @@ export async function scanWorkspace(root?: vscode.Uri): Promise<WorkspaceScan> {
         middlewareByName.set(mw.name, mw);
       }
     }
+
+  }
+
+  // Most projects mount imported routers under a more useful local name:
+  // `from routes.users import router as users_router`, then
+  // `application.mount_router(users_router)`. Resolve that import before
+  // deciding a route module is disconnected. A matching variable name across
+  // unrelated files is deliberately not enough evidence.
+  const routerBySource = new Map<string, RouterInfo>();
+  for (const router of routers) routerBySource.set(`${router.uri.fsPath}:${router.varName}`, router);
+  for (const file of fileTexts) {
+    const imports = new Map<string, { module: string; imported: string }>();
+    for (const line of file.text.split(/\r?\n/)) {
+      const imported = FROM_IMPORT.exec(line);
+      if (imported) {
+        const [, module, name, alias] = imported;
+        imports.set(alias ?? name, { module, imported: name });
+      }
+    }
+    for (const line of file.text.split(/\r?\n/)) {
+      const mount = MOUNTED_ROUTER.exec(line);
+      if (!mount) continue;
+      const binding = imports.get(mount[1]);
+      if (!binding || !root || binding.module.startsWith('.')) continue;
+      const source = vscode.Uri.file(path.join(root.fsPath, ...binding.module.split('.')) + '.py');
+      const router = routerBySource.get(`${source.fsPath}:${binding.imported}`);
+      if (router) router.mounted = true;
+    }
+  }
+
+  for (const middleware of middlewareByName.values()) {
+    middleware.registered = registeredMiddlewareNames.has(middleware.name);
   }
 
   return { routers, standaloneRoutes, models, middleware: [...middlewareByName.values()], jobs };
