@@ -83,11 +83,6 @@
         "category": "Sillo"
       },
       {
-        "command": "sillo.openDatabaseViewer",
-        "title": "Sillo: Open Database Viewer",
-        "category": "Sillo"
-      },
-      {
         "command": "sillo.newMiddleware",
         "title": "Sillo: New Middleware...",
         "category": "Sillo"
