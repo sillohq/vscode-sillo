@@ -1,11 +1,8 @@
 import * as vscode from 'vscode';
 import { CTX_MEMBERS } from './ctxApi';
-import { SilloStructureProvider } from './treeView';
 import { RouteCodeLensProvider, makeRunRouteCommand } from './requestRunner';
-import { RouteInfo, ModelInfo } from './scan';
 import { registerDiagnostics } from './diagnostics';
 import { ModelKwargCompletionProvider, ValidatedDataDefinitionProvider } from './models';
-import { DbViewerPanel } from './dbViewerPanel';
 import { resolveBaseUrl, resolveDevCommand } from './config';
 import { findProjectRoot } from './project';
 
@@ -163,6 +160,50 @@ async function createApp(): Promise<void> {
   terminal.sendText(`${createCommand} create-app ${name}`.trim());
 }
 
+/** A small setup flow for a new workspace; full settings remain available for
+ * advanced cases. */
+async function configureProject(): Promise<void> {
+  const choice = await vscode.window.showQuickPick([
+    { label: '$(server) Configure server', description: 'Set the command and URL used by Run and Try Request', value: 'server' },
+    { label: '$(symbol-method) Set application entry', description: 'Tell Sillo where application.mount_router(...) lives', value: 'app' },
+    { label: '$(settings-gear) Open all Sillo settings', description: 'Advanced configuration', value: 'settings' },
+  ], { placeHolder: 'What do you want to configure?' });
+  if (!choice) return;
+  if (choice.value === 'settings') {
+    await vscode.commands.executeCommand('workbench.action.openWorkspaceSettings', 'sillo');
+    return;
+  }
+
+  const settings = vscode.workspace.getConfiguration('sillo');
+  const target = vscode.ConfigurationTarget.WorkspaceFolder;
+  if (choice.value === 'app') {
+    const entry = await vscode.window.showInputBox({
+      prompt: 'Sillo application entry',
+      placeHolder: 'app.main:app',
+      value: settings.get<string>('appEntry', ''),
+      validateInput: (value) => /^([A-Za-z_]\w*\.)*[A-Za-z_]\w*:[A-Za-z_]\w*$/.test(value) ? undefined : 'Use module.path:application, e.g. app.main:app',
+    });
+    if (entry !== undefined) await settings.update('appEntry', entry.trim(), target);
+    return;
+  }
+  const command = await vscode.window.showInputBox({
+    prompt: 'Development server command',
+    value: settings.get<string>('devServerCommand', 'uv run sillo dev'),
+  });
+  if (command === undefined) return;
+  const baseUrl = await vscode.window.showInputBox({
+    prompt: 'Server URL used for route requests',
+    value: settings.get<string>('baseUrl', 'http://127.0.0.1:8000'),
+    validateInput: (value) => /^https?:\/\/.+/.test(value) ? undefined : 'Enter a full http:// or https:// URL',
+  });
+  if (baseUrl === undefined) return;
+  await Promise.all([
+    settings.update('devServerCommand', command.trim(), target),
+    settings.update('baseUrl', baseUrl.replace(/\/$/, ''), target),
+  ]);
+  vscode.window.showInformationMessage('Sillo is configured for this workspace.');
+}
+
 async function showBestPractices(context: vscode.ExtensionContext): Promise<void> {
   const uri = vscode.Uri.joinPath(context.extensionUri, 'docs', 'best-practices.md');
   await vscode.commands.executeCommand('markdown.showPreview', uri);
@@ -171,13 +212,10 @@ async function showBestPractices(context: vscode.ExtensionContext): Promise<void
 export function activate(context: vscode.ExtensionContext): void {
   registerDiagnostics(context);
 
-  const structureProvider = new SilloStructureProvider();
   const codeLensProvider = new RouteCodeLensProvider();
+  const output = vscode.window.createOutputChannel('Sillo');
 
-  const refreshAll = () => {
-    structureProvider.refresh();
-    codeLensProvider.refresh();
-  };
+  const refreshAll = () => codeLensProvider.refresh();
 
   const watcher = vscode.workspace.createFileSystemWatcher('**/*.py');
   watcher.onDidChange(refreshAll);
@@ -195,7 +233,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     watcher,
-    vscode.window.registerTreeDataProvider('sillo.structure', structureProvider),
     vscode.languages.registerCodeLensProvider(PYTHON, codeLensProvider),
     vscode.workspace.onDidChangeTextDocument((e) => scheduleCodeLensRefresh(e.document)),
 
@@ -204,22 +241,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerCompletionItemProvider(PYTHON, new ModelKwargCompletionProvider(), '='),
     vscode.languages.registerDefinitionProvider(PYTHON, new ValidatedDataDefinitionProvider()),
 
-    vscode.commands.registerCommand('sillo.refreshStructure', refreshAll),
-    vscode.commands.registerCommand('sillo.runRoute', makeRunRouteCommand(context)),
-    vscode.commands.registerCommand('sillo.openRouteDefinition', (node: { info: RouteInfo }) =>
-      vscode.commands.executeCommand('vscode.open', node.info.uri, {
-        selection: new vscode.Range(node.info.line, 0, node.info.line, 0),
-      })
-    ),
-    vscode.commands.registerCommand('sillo.runRouteFromTree', (node: { info: RouteInfo }) =>
-      makeRunRouteCommand(context)(node.info)
-    ),
+    output,
+    vscode.commands.registerCommand('sillo.configureProject', configureProject),
+    vscode.commands.registerCommand('sillo.runRoute', makeRunRouteCommand(output)),
     vscode.commands.registerCommand('sillo.previewApplication', previewApplication),
     vscode.commands.registerCommand('sillo.openApiDocs', openApiDocs),
-    vscode.commands.registerCommand('sillo.openDatabaseViewer', () => DbViewerPanel.show(context)),
-    vscode.commands.registerCommand('sillo.viewModelData', (node: { info: ModelInfo }) =>
-      DbViewerPanel.show(context, node.info.table)
-    ),
     vscode.commands.registerCommand('sillo.newMiddleware', newMiddleware),
     vscode.commands.registerCommand('sillo.createApp', createApp),
     vscode.commands.registerCommand('sillo.showBestPractices', () => showBestPractices(context)),
