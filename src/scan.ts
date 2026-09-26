@@ -51,6 +51,8 @@ export interface MiddlewareInfo {
    * built-in (CORSMiddleware, SessionMiddleware, ...) rather than anything
    * this project defines itself. */
   kind: 'defined' | 'applied';
+  /** A locally-defined middleware is wired through `.use(...)` somewhere. */
+  registered: boolean;
 }
 
 export interface JobInfo {
@@ -77,6 +79,8 @@ const META_TABLE = /^\s*table\s*=\s*["']([^"']+)["']/;
 const APPLIED_MIDDLEWARE = /\.use\(\s*(\w+)\(/;
 const USE_CALL_OPEN = /\.use\(\s*$/;
 const BARE_CLASS_CALL = /^\s*(\w+)\(/;
+const MOUNTED_ROUTER = /\.mount_router\(\s*([\w.]+)/;
+const FROM_IMPORT = /^\s*from\s+([.\w]+)\s+import\s+(\w+)(?:\s+as\s+(\w+))?\s*$/;
 const EXCLUDE_GLOB = '**/{node_modules,.venv,venv,.git,__pycache__,dist,build}/**';
 
 /**
@@ -192,6 +196,7 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
         uri,
         line: i,
         routes: [],
+        mounted: false,
       };
       routerByVar.set(varName, info);
       routers.push(info);
@@ -203,7 +208,7 @@ export function scanText(uri: vscode.Uri, text: string): WorkspaceScan {
       const [, name, bases] = classMatch;
       switch (classifyBases(bases)) {
         case 'middleware':
-          middleware.push({ name, uri, line: i, kind: 'defined' });
+          middleware.push({ name, uri, line: i, kind: 'defined', registered: false });
           break;
         case 'job':
           // sillo.work.queue.job.Job — subclass and implement handle(), per
