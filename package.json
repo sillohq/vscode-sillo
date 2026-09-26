@@ -2,7 +2,7 @@
   "name": "sillo",
   "displayName": "Sillo",
   "description": "IntelliSense, snippets and CLI shortcuts for the Sillo framework.",
-  "version": "0.10.0",
+  "version": "0.12.3",
   "publisher": "sillohq",
   "icon": "images/icon.png",
   "engines": {
