@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 
 /**
  * Lightweight, regex-based scanning of the workspace's Python files for
@@ -26,6 +27,8 @@ export interface RouterInfo {
   uri: vscode.Uri;
   line: number;
   routes: RouteInfo[];
+  /** Whether the router is connected to an application via mount_router(). */
+  mounted: boolean;
 }
 
 export interface ModelInfo {
