@@ -122,6 +122,14 @@ export interface AppEntry {
 }
 
 export async function findAppEntry(root: ProjectRoot): Promise<AppEntry | undefined> {
+  // A workspace setting is useful for projects that keep configuration outside
+  // pyproject.toml, and is deliberately checked before convention-based
+  // guesses. It has the same `module.path:application` form as [tool.sillo].
+  const configuredInEditor = vscode.workspace.getConfiguration('sillo', root.uri).get<string>('appEntry', '').trim();
+  if (configuredInEditor) {
+    return { importString: configuredInEditor, entryUri: importStringToUri(root, configuredInEditor) };
+  }
+
   const pyproject = await readFileSafe(vscode.Uri.file(path.join(root.dir, 'pyproject.toml')));
   if (pyproject) {
     const configured = parseToolSilloApp(pyproject);
