@@ -98,30 +98,6 @@
         "category": "Sillo"
       },
       {
-        "command": "sillo.refreshStructure",
-        "title": "Sillo: Refresh Application Structure",
-        "category": "Sillo",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "sillo.openRouteDefinition",
-        "title": "Sillo: Open Route Definition",
-        "category": "Sillo",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "sillo.runRouteFromTree",
-        "title": "Sillo: Try Request",
-        "category": "Sillo",
-        "icon": "$(play)"
-      },
-      {
-        "command": "sillo.viewModelData",
-        "title": "Sillo: View Table Data",
-        "category": "Sillo",
-        "icon": "$(table)"
-      },
-      {
         "command": "sillo.showBestPractices",
         "title": "Sillo: Show Best Practices",
         "category": "Sillo"
@@ -140,10 +116,15 @@
           "default": "uvx sillo-start",
           "description": "The command used to scaffold a new Sillo app (runs \"<this> create-app <name>\")."
         },
+        "sillo.appEntry": {
+          "type": "string",
+          "default": "",
+          "description": "Optional application import entry (for example, app.main:app). Use when the project does not declare [tool.sillo] app."
+        },
         "sillo.devServerCommand": {
           "type": "string",
-          "default": "uvicorn app.main:app --reload",
-          "description": "The command used to run the app for \"Sillo: Preview Application\". Leave unset (this default is only a last resort) to auto-detect from [tool.sillo] app / the app.main:app-style guesses in pyproject.toml, plus HOST/PORT from .env."
+          "default": "uv run sillo dev",
+          "description": "The command used to run the app for \"Sillo: Preview Application\". Leave unset to use Sillo's built-in development server."
         },
         "sillo.baseUrl": {
           "type": "string",
@@ -154,16 +135,6 @@
           "type": "string",
           "default": "/docs",
           "description": "Path the app serves its OpenAPI/Swagger UI on, for \"Sillo: Open API Docs\"."
-        },
-        "sillo.databasePath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the project's SQLite database, for the DB viewer. Absolute, or relative to the project's pyproject.toml directory. Only needed when auto-detection (reading sqlite:// out of .env / app/config.py, or finding a single *.db/*.sqlite file under storage/) doesn't find it."
-        },
-        "sillo.databaseUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Full sqlite:// or postgres:// connection URL for the DB viewer, checked before sillo.databasePath and before auto-detection. Use this for Postgres, or when the DATABASE_URL auto-detection reads isn't the one you actually want the viewer to open."
         }
       }
     }
